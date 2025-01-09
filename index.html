@@ -5,8 +5,51 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Portfolio</title>
+    <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-    <h1>This is my portfolio!</h1>
+    <header>
+        <nav>
+            <ul>
+                <li><a href="#about">About</a></li>
+                <li><a href="#projects">Projects</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+    
+    <div id="filling">
+        <div id="frontImageContainer">
+            <img src='Images/Me_Now.png' id="frontImage">
+        </div>
+        <p class="lead-text">hi,<br>i'm max</p>
+        <div class="gradient-overlay"></div>
+    </div>
+        <section id="about" class="container">
+            <img src='Images/My_Face.png' id="roundedImage">
+            <div class="flextainer">
+                <p id="catchText">uhh... who is this guy?</p>
+                <p id="followText">really, i'm just a kid. well, like, for now. i'll need to update this soon.</p>
+            </div>
+        </section>
+        <section id="projects" class="container">
+            <div class="flextainer">
+                <p id="catchText">alright, intro done</p>
+                <p id="followText">lemme show you what i can do</p>
+            </div>
+            <img src='Images/gojo.jpg' id="roundedImage">
+        </section>
+        <section id="contact" class="container">
+            <img src='Images/juice wrld.png' id="roundedImage">
+            <div class="flextainer">
+                <p id="catchText">hey future max</p>
+                <p id="followText">add the fade effect thing to these chunks too</p>
+            </div>
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2025 Maxwell Grant</p>
+    </footer>
+    <script src="js/script.js"></script>
 </body>
 </html>
