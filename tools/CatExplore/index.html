@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f6f7fb" />
+  <title>Arrow — Category Diagram Editor</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" crossorigin="anonymous" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #20283a;
+      --muted: #758096;
+      --line: #e5e8f0;
+      --panel: #ffffff;
+      --surface: #f6f7fb;
+      --accent: #6658d3;
+      --accent-soft: #efedff;
+      --shadow: 0 12px 34px rgba(33, 42, 69, .08);
+      --radius: 13px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; overflow: hidden; background: var(--surface); color: var(--ink); }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    .app { height: 100%; display: grid; grid-template-rows: 62px minmax(0, 1fr) 27px; }
+    .topbar { display: flex; align-items: center; gap: 14px; padding: 0 18px; background: #fff; border-bottom: 1px solid var(--line); z-index: 5; }
+    .brand-mark { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 10px; color: #fff; font-size: 18px; font-weight: 800; background: linear-gradient(135deg, #8175eb, #5646bf); box-shadow: 0 4px 10px rgba(102,88,211,.24); }
+    .brand-copy { display: flex; flex-direction: column; line-height: 1.12; }
+    .brand-name { font-size: 14px; font-weight: 750; letter-spacing: -.02em; }
+    .brand-sub { margin-top: 3px; font-size: 10px; color: var(--muted); letter-spacing: .02em; }
+    .top-spacer { flex: 1; }
+    .top-actions { display: flex; gap: 7px; align-items: center; }
+    .btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; height: 34px; padding: 0 11px; font-size: 11px; font-weight: 650; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 7px; transition: .14s ease; white-space: nowrap; }
+    .btn:hover { border-color: #c9c6ed; background: #faf9ff; }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary:hover { background: #594bc4; }
+    .btn.subtle { background: transparent; }
+    .btn.danger { color: #bf4557; }
+    .btn:disabled { opacity: .38; cursor: not-allowed; }
+    .workspace { min-height: 0; display: grid; grid-template-columns: 58px minmax(0, 1fr) 258px; }
+    .toolrail { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 13px 8px; background: #fff; border-right: 1px solid var(--line); z-index: 2; }
+    .tool-button { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; color: #67728a; position: relative; }
+    .tool-button:hover { color: var(--accent); background: #f6f5ff; }
+    .tool-button.active { color: var(--accent); background: var(--accent-soft); border-color: #ddd9ff; }
+    .tool-button svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .tool-separator { width: 27px; height: 1px; background: var(--line); margin: 3px 0; }
+    .tool-tip { position: absolute; left: 47px; top: 50%; transform: translateY(-50%); background: #252b3c; color: #fff; padding: 5px 8px; border-radius: 6px; font-size: 10px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 20; }
+    .tool-button:hover .tool-tip { opacity: 1; }
+    .board-wrap { min-width: 0; min-height: 0; display: grid; grid-template-rows: 42px minmax(0, 1fr); padding: 0 14px 13px; }
+    .board-toolbar { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .board-title { font-size: 11px; font-weight: 750; letter-spacing: .02em; }
+    .tool-hint { color: var(--muted); font-size: 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .board-toolbar .top-spacer { flex: 1; }
+    .tiny-action { border: 0; background: transparent; color: #727c92; font-size: 10px; padding: 5px 7px; border-radius: 6px; cursor: pointer; }
+    .tiny-action:hover { background: #eeeff5; color: var(--ink); }
+    .stage {
+      min-height: 0; min-width: 0; position: relative; overflow: hidden; background-color: #fff;
+      background-image: radial-gradient(#dfe3ee 0.8px, transparent .8px); background-size: 19px 19px;
+      border: 1px solid #e2e5ee; border-radius: 13px; box-shadow: var(--shadow); outline: none; touch-action: none;
+    }
+    #edgeSvg, #labelsLayer, #nodesLayer { position: absolute; inset: 0; width: 100%; height: 100%; }
+    #edgeSvg { overflow: visible; z-index: 1; }
+    #labelsLayer { z-index: 2; pointer-events: none; }
+    #nodesLayer { z-index: 3; pointer-events: none; }
+    .object-node {
+      position: absolute; transform: translate(-50%, -50%); min-width: 54px; max-width: 190px; min-height: 43px;
+      padding: 9px 15px; display: flex; align-items: center; justify-content: center; border: 1.7px solid #41506a;
+      border-radius: 10px; background: #fff; color: #20283a; box-shadow: 0 3px 8px rgba(32,40,58,.08);
+      cursor: grab; pointer-events: auto; user-select: none; white-space: nowrap; transition: box-shadow .12s, border-color .12s;
+    }
+    .object-node:active { cursor: grabbing; }
+    .object-node.selected { outline: 2px solid rgba(102,88,211,.22); border-color: var(--accent) !important; box-shadow: 0 5px 15px rgba(102,88,211,.16); }
+    .object-node.pending { outline: 2px dashed #9b91ed; outline-offset: 4px; }
+    .object-node .katex { font-size: 1.08em; }
+    .edge-label { position: absolute; transform: translate(-50%, -50%); padding: 3px 7px 4px; border-radius: 6px; background: rgba(255,255,255,.96); border: 1px solid rgba(222,226,237,.9); box-shadow: 0 2px 6px rgba(30,40,60,.06); color: #2c3447; font-size: 12px; white-space: nowrap; }
+    .edge-label .katex { font-size: 1em; }
+    .empty-state { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(330px, calc(100% - 36px)); text-align: center; pointer-events: none; color: #8a93a7; }
+    .empty-state-icon { margin: 0 auto 12px; width: 43px; height: 43px; border-radius: 13px; display: grid; place-items: center; background: #f0efff; color: var(--accent); font-size: 22px; font-weight: 700; }
+    .empty-state strong { display: block; color: #4d566c; font-size: 12px; margin-bottom: 5px; }
+    .empty-state span { display: block; font-size: 10px; line-height: 1.6; }
+    .inspector { border-left: 1px solid var(--line); background: #fff; padding: 17px 15px; overflow: auto; }
+    .inspector-heading { font-size: 12px; font-weight: 760; margin: 1px 0 4px; }
+    .inspector-sub { font-size: 10px; color: var(--muted); line-height: 1.5; margin-bottom: 18px; }
+    .section-label { color: #8992a5; font-size: 9px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; margin: 17px 0 9px; }
+    .field { display: block; margin: 0 0 12px; }
+    .field-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; color: #5d687e; font-size: 10px; font-weight: 650; }
+    .field input[type="text"] { display: block; width: 100%; height: 34px; border: 1px solid #e1e5ef; border-radius: 7px; outline: none; padding: 0 9px; color: var(--ink); background: #fff; font-size: 11px; }
+    .field input[type="text"]:focus { border-color: #a69ff0; box-shadow: 0 0 0 3px rgba(102,88,211,.1); }
+    .field input[type="color"] { width: 100%; height: 31px; border: 1px solid #e1e5ef; border-radius: 7px; padding: 3px; background: #fff; cursor: pointer; }
+    .field select { width: 100%; height: 34px; border: 1px solid #e1e5ef; border-radius: 7px; background: #fff; padding: 0 8px; font-size: 11px; color: var(--ink); }
+    .field-note { color: #929bad; font-size: 9px; margin-top: 5px; line-height: 1.45; }
+    .inspector-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 16px; }
+    .inspector-actions .btn { flex: 1; }
+    .shortcut { display: flex; justify-content: space-between; gap: 10px; color: #7f899c; font-size: 10px; padding: 7px 0; border-bottom: 1px solid #f0f1f5; }
+    kbd { font: inherit; color: #5f6980; background: #f4f5f8; border: 1px solid #e5e7ed; border-radius: 4px; padding: 2px 5px; }
+    .statusbar { display: flex; align-items: center; gap: 13px; padding: 0 13px; background: #fff; border-top: 1px solid var(--line); color: #8b94a7; font-size: 9px; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #62bf91; }
+    .status-spacer { flex: 1; }
+    .modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(25,31,47,.28); display: grid; place-items: center; padding: 20px; }
+    .modal { width: min(410px, 100%); background: #fff; border-radius: 14px; padding: 20px; box-shadow: 0 20px 70px rgba(20,25,40,.2); }
+    .modal h2 { margin: 0 0 8px; font-size: 15px; }
+    .modal p { margin: 0 0 15px; color: #707b91; line-height: 1.55; font-size: 11px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 17px; }
+    .hidden { display: none !important; }
+    .file-input { display: none; }
+    @media (max-width: 850px) {
+      .workspace { grid-template-columns: 52px minmax(0,1fr); grid-template-rows: minmax(0,1fr) auto; }
+      .inspector { grid-column: 1 / -1; grid-row: 2; max-height: 190px; border-left: 0; border-top: 1px solid var(--line); padding: 12px 16px; }
+      .board-wrap { grid-column: 2; grid-row: 1; }
+      .toolrail { grid-column: 1; grid-row: 1; }
+      .inspector-sub { margin-bottom: 8px; }
+      .inspector .section-label { margin-top: 10px; }
+      .inspector .field { max-width: 250px; }
+    }
+    @media (max-width: 560px) {
+      .app { grid-template-rows: 54px minmax(0,1fr) 25px; }
+      .topbar { padding: 0 10px; gap: 9px; }
+      .brand-sub { display: none; }
+      .top-actions .btn { width: 34px; padding: 0; font-size: 0; gap: 0; }
+      .top-actions .btn .button-icon { font-size: 14px; }
+      .board-wrap { padding: 0 7px 8px; grid-template-rows: 38px minmax(0,1fr); }
+      .tool-hint { display: none; }
+      .inspector { max-height: 175px; }
+      .statusbar { padding: 0 8px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand-mark">↗</div>
+    <div class="brand-copy"><span class="brand-name">Arrow</span><span class="brand-sub">CATEGORY DIAGRAM EDITOR</span></div>
+    <div class="top-spacer"></div>
+    <div class="top-actions">
+      <button class="btn" id="exampleBtn" title="Load an example diagram"><span class="button-icon">◇</span> Example</button>
+      <button class="btn" id="openBtn" title="Open a diagram JSON file"><span class="button-icon">↥</span> Open</button>
+      <button class="btn" id="saveBtn" title="Download editable diagram data"><span class="button-icon">↓</span> Save</button>
+      <button class="btn primary" id="exportBtn" title="Export the diagram as SVG"><span class="button-icon">⇩</span> Export SVG</button>
+      <input class="file-input" type="file" id="fileInput" accept=".json,application/json" />
+    </div>
+  </header>
+
+  <div class="workspace">
+    <nav class="toolrail" aria-label="Diagram tools">
+      <button class="tool-button active" data-tool="select" aria-label="Select and move (V)">
+        <svg viewBox="0 0 24 24"><path d="m5 3 13 10-6 .8-2.8 6.2L5 3Z"/><path d="m12 14 4 6"/></svg><span class="tool-tip">Select / move · V</span>
+      </button>
+      <button class="tool-button" data-tool="object" aria-label="Create object (O)">
+        <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="M12 8v8M8 12h8"/></svg><span class="tool-tip">Place object · O</span>
+      </button>
+      <button class="tool-button" data-tool="arrow" aria-label="Create morphism (A)">
+        <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2.5"/><circle cx="19" cy="12" r="2.5"/><path d="M8 12h8m-3-3 3 3-3 3"/></svg><span class="tool-tip">Draw morphism · A</span>
+      </button>
+      <div class="tool-separator"></div>
+      <button class="tool-button" id="addBendTool" aria-label="Add bend to selected morphism">
+        <svg viewBox="0 0 24 24"><path d="M4 18h6V7h10"/><circle cx="10" cy="7" r="2.2"/></svg><span class="tool-tip">Add bend to selected arrow</span>
+      </button>
+      <div class="tool-separator"></div>
+      <button class="tool-button" id="undoBtn" aria-label="Undo (Ctrl+Z)">
+        <svg viewBox="0 0 24 24"><path d="M9 8 4 12l5 4"/><path d="M4 12h9a6 6 0 0 1 6 6"/></svg><span class="tool-tip">Undo · Ctrl+Z</span>
+      </button>
+      <button class="tool-button" id="redoBtn" aria-label="Redo (Ctrl+Shift+Z)">
+        <svg viewBox="0 0 24 24"><path d="m15 8 5 4-5 4"/><path d="M20 12h-9a6 6 0 0 0-6 6"/></svg><span class="tool-tip">Redo · Ctrl+Shift+Z</span>
+      </button>
+    </nav>
+
+    <main class="board-wrap">
+      <div class="board-toolbar">
+        <span class="board-title">Untitled diagram</span>
+        <span class="tool-hint" id="toolHint">Select objects and arrows, or drag to reposition them.</span>
+        <div class="top-spacer"></div>
+        <button class="tiny-action" id="clearBtn">Clear canvas</button>
+      </div>
+      <div class="stage" id="stage" tabindex="0" aria-label="Diagram canvas">
+        <svg id="edgeSvg" xmlns="http://www.w3.org/2000/svg" aria-label="Morphisms"></svg>
+        <div id="labelsLayer"></div>
+        <div id="nodesLayer"></div>
+        <div class="empty-state" id="emptyState">
+          <div class="empty-state-icon">↗</div>
+          <strong>Your diagram starts here</strong>
+          <span>Choose <b>Object</b> and click the canvas. Add arrows by choosing <b>Morphism</b>, then clicking a source and target object.</span>
+        </div>
+      </div>
+    </main>
+
+    <aside class="inspector" id="inspector">
+      <div id="inspectorContent">
+        <div class="inspector-heading">Inspector</div>
+        <div class="inspector-sub">Select an object or morphism to edit its label, colour, and geometry.</div>
+        <div class="section-label">Quick guide</div>
+        <div class="shortcut"><span>Move / select</span><kbd>V</kbd></div>
+        <div class="shortcut"><span>Place object</span><kbd>O</kbd></div>
+        <div class="shortcut"><span>Draw morphism</span><kbd>A</kbd></div>
+        <div class="shortcut"><span>Add bend point</span><kbd>Shift + click arrow</kbd></div>
+        <div class="shortcut"><span>Delete selection</span><kbd>Del</kbd></div>
+        <div class="shortcut"><span>Undo / redo</span><kbd>Ctrl + Z / Y</kbd></div>
+        <div class="section-label">LaTeX</div>
+        <div class="field-note">Labels accept LaTeX, for example <code>\mathcal{C}</code>, <code>F(x)</code>, or <code>\alpha \circ f</code>. Typesetting is provided by KaTeX.</div>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="statusbar">
+    <span class="status-dot"></span><span id="statusText">Ready</span>
+    <span class="status-spacer"></span><span id="countsText">0 objects · 0 morphisms</span><span>Autosaved locally</span>
+  </footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const STORAGE_KEY = 'arrow-category-diagram-v1';
+  const stage = document.getElementById('stage');
+  const edgeSvg = document.getElementById('edgeSvg');
+  const nodesLayer = document.getElementById('nodesLayer');
+  const labelsLayer = document.getElementById('labelsLayer');
+  const emptyState = document.getElementById('emptyState');
+  const inspectorContent = document.getElementById('inspectorContent');
+  const toolHint = document.getElementById('toolHint');
+  const statusText = document.getElementById('statusText');
+  const countsText = document.getElementById('countsText');
+  const fileInput = document.getElementById('fileInput');
+  let tool = 'select';
+  let selected = null; // { type: 'object'|'edge', id }
+  let pendingSource = null;
+  let drag = null;
+  let inspectorEditBefore = null;
+  let undoStack = [];
+  let redoStack = [];
+  let objectCounter = 0;
+  let edgeCounter = 0;
+  let state = { version: 1, objects: [], edges: [] };
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const SVG_TAGS = new Set(['svg', 'defs', 'marker', 'path', 'g', 'circle', 'rect', 'text']);
+  const $ = (tag, attrs = {}, children = []) => {
+    const el = SVG_TAGS.has(tag) ? document.createElementNS(SVG_NS, tag) : document.createElement(tag);
+    for (const [key, value] of Object.entries(attrs)) {
+      if (key === 'class') el.setAttribute('class', value);
+      else if (key === 'text') el.textContent = value;
+      else el.setAttribute(key, value);
+    }
+    for (const child of children) el.append(child);
+    return el;
+  };
+  const clone = value => JSON.parse(JSON.stringify(value));
+  const makeId = prefix => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const setStatus = message => { statusText.textContent = message; };
+  const escapeXml = str => String(str).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]));
+  const objectById = id => state.objects.find(o => o.id === id);
+  const edgeById = id => state.edges.find(e => e.id === id);
+  const selectedObject = () => selected?.type === 'object' ? objectById(selected.id) : null;
+  const selectedEdge = () => selected?.type === 'edge' ? edgeById(selected.id) : null;
+
+  function renderMath(el, latex) {
+    const source = latex == null || latex === '' ? '\\;' : String(latex);
+    if (window.katex && typeof window.katex.render === 'function') {
+      try { window.katex.render(source, el, { throwOnError: false, strict: 'ignore', output: 'htmlAndMathml' }); }
+      catch { el.textContent = source; }
+    } else {
+      el.textContent = source;
+      el.classList.add('latex-fallback');
+    }
+  }
+
+  function pushHistory(snapshot) {
+    if (!snapshot) return;
+    undoStack.push(snapshot);
+    if (undoStack.length > 100) undoStack.shift();
+    redoStack = [];
+    updateHistoryButtons();
+  }
+  function updateHistoryButtons() {
+    document.getElementById('undoBtn').disabled = undoStack.length === 0;
+    document.getElementById('redoBtn').disabled = redoStack.length === 0;
+  }
+  function commit(before, status = 'Changes saved') {
+    pushHistory(before);
+    persist();
+    render();
+    setStatus(status);
+  }
+  function persist() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    catch { setStatus('Could not autosave in this browser'); }
+  }
+  function undo() {
+    if (!undoStack.length) return;
+    redoStack.push(clone(state));
+    state = undoStack.pop();
+    selected = null; pendingSource = null; tool = 'select';
+    persist(); render(); updateHistoryButtons(); setStatus('Undid last change');
+  }
+  function redo() {
+    if (!redoStack.length) return;
+    undoStack.push(clone(state));
+    state = redoStack.pop();
+    selected = null; pendingSource = null; tool = 'select';
+    persist(); render(); updateHistoryButtons(); setStatus('Redid change');
+  }
+
+  function setTool(next) {
+    tool = next;
+    pendingSource = null;
+    document.querySelectorAll('[data-tool]').forEach(button => button.classList.toggle('active', button.dataset.tool === tool));
+    const hints = {
+      select: 'Select an object or arrow. Drag objects and bend handles to rearrange the diagram.',
+      object: 'Click anywhere on the canvas to place an object. You can keep clicking to add more.',
+      arrow: 'Click a source object, then a target object to create a directed morphism.'
+    };
+    toolHint.textContent = hints[tool];
+    setStatus(tool === 'arrow' ? 'Choose a source object' : tool === 'object' ? 'Choose a position for an object' : 'Ready');
+    renderCanvas(); renderToolState();
+  }
+  function renderToolState() {
+    document.querySelectorAll('.object-node').forEach(el => {
+      el.classList.toggle('pending', tool === 'arrow' && el.dataset.id === pendingSource);
+    });
+  }
+  function stagePoint(event) {
+    const rect = stage.getBoundingClientRect();
+    return { x: Math.max(0, Math.min(rect.width, event.clientX - rect.left)), y: Math.max(0, Math.min(rect.height, event.clientY - rect.top)) };
+  }
+  function defaultObjectLabel() {
+    const n = objectCounter++;
+    return n < 26 ? String.fromCharCode(65 + n) : `${String.fromCharCode(65 + (n % 26))}_{${Math.floor(n / 26)}}`;
+  }
+  function defaultEdgeLabel() {
+    const n = edgeCounter++;
+    return n < 21 ? String.fromCharCode(102 + n) : `f_{${n - 20}}`;
+  }
+  function addObject(point) {
+    const before = clone(state);
+    const obj = { id: makeId('obj'), x: point.x, y: point.y, label: defaultObjectLabel(), color: '#41506a', fill: '#ffffff' };
+    state.objects.push(obj);
+    selected = { type: 'object', id: obj.id };
+    commit(before, 'Object added');
+    renderInspector();
+  }
+  function addEdge(sourceId, targetId) {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    const before = clone(state);
+    const edge = { id: makeId('arr'), source: sourceId, target: targetId, label: defaultEdgeLabel(), color: '#6658d3', width: 2, style: 'solid', bends: [] };
+    state.edges.push(edge);
+    selected = { type: 'edge', id: edge.id };
+    commit(before, 'Morphism added');
+    renderInspector();
+  }
+
+  function rayRectIntersection(center, direction, width, height) {
+    const dx = direction.x, dy = direction.y;
+    if (Math.abs(dx) + Math.abs(dy) < .0001) return { x: center.x, y: center.y };
+    const tx = Math.abs(dx) < .0001 ? Infinity : (width / 2) / Math.abs(dx);
+    const ty = Math.abs(dy) < .0001 ? Infinity : (height / 2) / Math.abs(dy);
+    const t = Math.min(tx, ty);
+    return { x: center.x + dx * t, y: center.y + dy * t };
+  }
+  function buildEdgePoints(edge, dims) {
+    const source = objectById(edge.source), target = objectById(edge.target);
+    if (!source || !target) return [];
+    const sourceDim = dims.get(source.id) || { w: 72, h: 46 };
+    const targetDim = dims.get(target.id) || { w: 72, h: 46 };
+    const raw = [{ x: source.x, y: source.y }, ...(edge.bends || []).map(p => ({ x: p.x, y: p.y })), { x: target.x, y: target.y }];
+    const startDir = { x: raw[1].x - source.x, y: raw[1].y - source.y };
+    const endDir = { x: raw[raw.length - 2].x - target.x, y: raw[raw.length - 2].y - target.y };
+    const start = rayRectIntersection({ x: source.x, y: source.y }, startDir, sourceDim.w, sourceDim.h);
+    const end = rayRectIntersection({ x: target.x, y: target.y }, endDir, targetDim.w, targetDim.h);
+    return [start, ...raw.slice(1, -1), end];
+  }
+  function pathLength(points) {
+    let total = 0;
+    for (let i = 1; i < points.length; i++) total += Math.hypot(points[i].x - points[i-1].x, points[i].y - points[i-1].y);
+    return total;
+  }
+  function pointAlong(points, fraction = .5) {
+    if (!points.length) return { x: 0, y: 0 };
+    const total = pathLength(points);
+    if (total < .001) return points[0];
+    let remaining = total * fraction;
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i-1], b = points[i];
+      const len = Math.hypot(b.x-a.x, b.y-a.y);
+      if (remaining <= len) {
+        const t = len ? remaining / len : 0;
+        return { x: a.x + (b.x-a.x)*t, y: a.y + (b.y-a.y)*t };
+      }
+      remaining -= len;
+    }
+    return points[points.length - 1];
+  }
+  function projectOntoPolyline(point, points) {
+    let best = { distance: Infinity, segment: 0, point: points[0] || point };
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i-1], b = points[i];
+      const vx = b.x-a.x, vy = b.y-a.y;
+      const d2 = vx*vx + vy*vy;
+      const t = d2 ? Math.max(0, Math.min(1, ((point.x-a.x)*vx + (point.y-a.y)*vy)/d2)) : 0;
+      const projection = { x: a.x+t*vx, y: a.y+t*vy };
+      const distance = Math.hypot(point.x-projection.x, point.y-projection.y);
+      if (distance < best.distance) best = { distance, segment: i-1, point: projection };
+    }
+    return best;
+  }
+
+  function renderCanvas() {
+    const rect = stage.getBoundingClientRect();
+    edgeSvg.setAttribute('viewBox', `0 0 ${Math.max(1, rect.width)} ${Math.max(1, rect.height)}`);
+    edgeSvg.setAttribute('width', rect.width);
+    edgeSvg.setAttribute('height', rect.height);
+    nodesLayer.replaceChildren();
+    labelsLayer.replaceChildren();
+    const dims = new Map();
+    for (const obj of state.objects) {
+      const node = $('div', { class: 'object-node', 'data-id': obj.id });
+      node.style.left = `${obj.x}px`; node.style.top = `${obj.y}px`;
+      node.style.borderColor = obj.color || '#41506a'; node.style.background = obj.fill || '#ffffff';
+      if (selected?.type === 'object' && selected.id === obj.id) node.classList.add('selected');
+      if (tool === 'arrow' && pendingSource === obj.id) node.classList.add('pending');
+      const math = $('span', { class: 'math-label' });
+      renderMath(math, obj.label);
+      node.append(math);
+      nodesLayer.append(node);
+      dims.set(obj.id, { w: node.offsetWidth, h: node.offsetHeight });
+    }
+    edgeSvg.replaceChildren();
+    const defs = $('defs');
+    edgeSvg.append(defs);
+    for (const edge of state.edges) {
+      const points = buildEdgePoints(edge, dims);
+      if (points.length < 2) continue;
+      const d = points.map((p, i) => `${i ? 'L' : 'M'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ');
+      const markerId = `arrow-${edge.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+      const marker = $('marker', { id: markerId, markerWidth: '9', markerHeight: '9', refX: '7.3', refY: '4.5', orient: 'auto', markerUnits: 'userSpaceOnUse' });
+      marker.append($('path', { d: 'M 0 0 L 9 4.5 L 0 9 z', fill: edge.color || '#6658d3' }));
+      defs.append(marker);
+      const group = $('g', { 'data-edge-id': edge.id });
+      group.append($('path', { d, class: 'edge-hit', fill: 'none', stroke: '#ffffff', 'stroke-opacity': '0.01', 'stroke-width': '17', 'pointer-events': 'stroke' }));
+      const visible = $('path', { d, fill: 'none', stroke: edge.color || '#6658d3', 'stroke-width': selected?.type === 'edge' && selected.id === edge.id ? (Number(edge.width) + .8) : (Number(edge.width) || 2), 'stroke-linecap': 'round', 'stroke-linejoin': 'miter', 'marker-end': `url(#${markerId})`, 'pointer-events': 'stroke' });
+      if (edge.style === 'dashed') visible.setAttribute('stroke-dasharray', '7 5');
+      if (edge.style === 'dotted') visible.setAttribute('stroke-dasharray', '2 5');
+      group.append(visible);
+      if (selected?.type === 'edge' && selected.id === edge.id) {
+        (edge.bends || []).forEach((bend, index) => {
+          const handle = $('circle', { cx: bend.x, cy: bend.y, r: '5.5', class: 'bend-handle', fill: '#fff', stroke: edge.color || '#6658d3', 'stroke-width': '2', 'data-bend-edge': edge.id, 'data-bend-index': index, 'pointer-events': 'all' });
+          group.append(handle);
+        });
+      }
+      edgeSvg.append(group);
+      if (edge.label) {
+        const position = pointAlong(points, .5);
+        const label = $('div', { class: 'edge-label' });
+        label.style.left = `${position.x}px`; label.style.top = `${position.y - 11}px`;
+        const math = $('span', { class: 'math-label' }); renderMath(math, edge.label); label.append(math);
+        labelsLayer.append(label);
+      }
+    }
+    emptyState.classList.toggle('hidden', state.objects.length > 0);
+    countsText.textContent = `${state.objects.length} objects · ${state.edges.length} morphisms`;
+  }
+
+  function renderInspector() {
+    const obj = selectedObject();
+    const edge = selectedEdge();
+    inspectorContent.replaceChildren();
+    if (obj) {
+      inspectorContent.append($('div', { class: 'inspector-heading', text: 'Object' }));
+      inspectorContent.append($('div', { class: 'inspector-sub', text: 'Edit the object label and appearance. Drag it on the canvas to reposition it.' }));
+      inspectorContent.append($('div', { class: 'section-label', text: 'Notation' }));
+      inspectorContent.append(makeTextField('LaTeX label', 'label', obj.label, 'e.g. \\mathcal{C} or X_{n}'));
+      inspectorContent.append($('div', { class: 'field-note', text: 'Enter LaTeX without dollar signs. Changes appear on the canvas as you type.' }));
+      inspectorContent.append($('div', { class: 'section-label', text: 'Appearance' }));
+      inspectorContent.append(makeColorField('Border colour', 'color', obj.color));
+      inspectorContent.append(makeColorField('Fill colour', 'fill', obj.fill));
+      inspectorContent.append(actionRow('Delete object', 'delete', 'danger'));
+    } else if (edge) {
+      inspectorContent.append($('div', { class: 'inspector-heading', text: 'Morphism' }));
+      inspectorContent.append($('div', { class: 'inspector-sub', text: `Directed arrow from ${objectById(edge.source)?.label || '…'} to ${objectById(edge.target)?.label || '…'}. Drag bend handles to shape its path.` }));
+      inspectorContent.append($('div', { class: 'section-label', text: 'Notation' }));
+      inspectorContent.append(makeTextField('LaTeX label', 'label', edge.label, 'e.g. f or \\alpha'));
+      inspectorContent.append($('div', { class: 'section-label', text: 'Appearance' }));
+      inspectorContent.append(makeColorField('Arrow colour', 'color', edge.color));
+      const styleField = $('label', { class: 'field' });
+      styleField.append($('span', { class: 'field-label', text: 'Line style' }));
+      const select = $('select', { 'data-prop': 'style' });
+      [['solid','Solid'],['dashed','Dashed'],['dotted','Dotted']].forEach(([value, text]) => {
+        const option = $('option', { value, text }); if (edge.style === value) option.selected = true; select.append(option);
+      });
+      styleField.append(select); inspectorContent.append(styleField);
+      const widthField = $('label', { class: 'field' });
+      widthField.append($('span', { class: 'field-label', text: 'Stroke width' }));
+      const widthSelect = $('select', { 'data-prop': 'width' });
+      [['1.5','Fine'],['2','Normal'],['3','Thick'],['4','Heavy']].forEach(([value, text]) => {
+        const option = $('option', { value, text }); if (Number(edge.width) === Number(value)) option.selected = true; widthSelect.append(option);
+      });
+      widthField.append(widthSelect); inspectorContent.append(widthField);
+      inspectorContent.append($('div', { class: 'section-label', text: 'Geometry' }));
+      inspectorContent.append(actionRow('Add bend point', 'add-bend'));
+      if ((edge.bends || []).length) inspectorContent.append(actionRow('Remove all bends', 'clear-bends', 'subtle'));
+      inspectorContent.append(actionRow('Delete morphism', 'delete', 'danger'));
+    } else {
+      inspectorContent.append($('div', { class: 'inspector-heading', text: 'Inspector' }));
+      inspectorContent.append($('div', { class: 'inspector-sub', text: 'Select an object or morphism to edit its label, colour, and geometry.' }));
+      inspectorContent.append($('div', { class: 'section-label', text: 'Quick guide' }));
+      [['Move / select','V'],['Place object','O'],['Draw morphism','A'],['Add bend point','Shift + click arrow'],['Delete selection','Del'],['Undo / redo','Ctrl + Z / Y']].forEach(([a,b]) => {
+        const row = $('div', { class: 'shortcut' }); row.append($('span', { text: a }), $('kbd', { text: b })); inspectorContent.append(row);
+      });
+      inspectorContent.append($('div', { class: 'section-label', text: 'LaTeX' }));
+      const note = $('div', { class: 'field-note' }); note.innerHTML = 'Labels accept LaTeX, for example <code>\\mathcal{C}</code>, <code>F(x)</code>, or <code>\\alpha \\circ f</code>. Typesetting is provided by KaTeX.'; inspectorContent.append(note);
+    }
+  }
+  function makeTextField(label, prop, value, placeholder) {
+    const field = $('label', { class: 'field' });
+    field.append($('span', { class: 'field-label', text: label }));
+    const input = $('input', { type: 'text', value: value || '', placeholder: placeholder || '', 'data-prop': prop, autocomplete: 'off', spellcheck: 'false' });
+    field.append(input); return field;
+  }
+  function makeColorField(label, prop, value) {
+    const field = $('label', { class: 'field' }); field.append($('span', { class: 'field-label', text: label }));
+    field.append($('input', { type: 'color', value: value || '#6658d3', 'data-prop': prop })); return field;
+  }
+  function actionRow(text, action, style = '') {
+    const row = $('div', { class: 'inspector-actions' });
+    row.append($('button', { class: `btn ${style}`, type: 'button', 'data-action': action, text })); return row;
+  }
+  function render() {
+    renderCanvas(); renderInspector(); updateHistoryButtons();
+  }
+
+  function insertBend(edge, point, segmentIndex) {
+    const before = clone(state);
+    const index = Math.max(0, Math.min(edge.bends.length, segmentIndex));
+    edge.bends.splice(index, 0, { x: point.x, y: point.y });
+    selected = { type: 'edge', id: edge.id };
+    commit(before, 'Bend point added'); renderInspector();
+  }
+  function addBendToSelected() {
+    const edge = selectedEdge();
+    if (!edge) { setStatus('Select a morphism first'); return; }
+    const dims = new Map([...nodesLayer.querySelectorAll('.object-node')].map(el => [el.dataset.id, { w: el.offsetWidth, h: el.offsetHeight }]));
+    const points = buildEdgePoints(edge, dims);
+    const midpoint = pointAlong(points, .5);
+    const projected = projectOntoPolyline(midpoint, points);
+    insertBend(edge, projected.point, projected.segment);
+
+  }
+  function deleteSelected() {
+    if (!selected) return;
+    const before = clone(state);
+    if (selected.type === 'object') {
+      const id = selected.id;
+      state.objects = state.objects.filter(o => o.id !== id);
+      state.edges = state.edges.filter(e => e.source !== id && e.target !== id);
+    } else state.edges = state.edges.filter(e => e.id !== selected.id);
+    selected = null; pendingSource = null;
+    commit(before, 'Selection deleted');
+  }
+
+  stage.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    const point = stagePoint(event);
+    const target = event.target;
+    const objectEl = target.closest?.('.object-node');
+    const bendEl = target.closest?.('.bend-handle');
+    const edgeEl = target.closest?.('[data-edge-id]');
+
+    if (tool === 'object') {
+      if (!objectEl && !edgeEl && !bendEl) addObject(point);
+      return;
+    }
+    if (tool === 'arrow') {
+      if (!objectEl) return;
+      const id = objectEl.dataset.id;
+      if (!pendingSource) {
+        pendingSource = id; selected = { type: 'object', id }; renderCanvas(); renderInspector(); setStatus('Now choose a target object');
+      } else {
+        const source = pendingSource; pendingSource = null;
+        if (source !== id) addEdge(source, id);
+        else { setStatus('Choose a different target object'); renderCanvas(); }
+      }
+      return;
+    }
+
+    if (bendEl) {
+      const edgeId = bendEl.dataset.bendEdge;
+      const index = Number(bendEl.dataset.bendIndex);
+      const edge = edgeById(edgeId);
+      if (!edge) return;
+      selected = { type: 'edge', id: edgeId };
+      drag = { kind: 'bend', id: edgeId, index, start: point, origin: clone(edge.bends[index]), moved: false, before: clone(state) };
+      stage.setPointerCapture(event.pointerId);
+      renderInspector();
+      return;
+    }
+    if (objectEl) {
+      const id = objectEl.dataset.id;
+      selected = { type: 'object', id };
+      const obj = objectById(id);
+      drag = { kind: 'object', id, start: point, origin: { x: obj.x, y: obj.y }, moved: false, before: clone(state) };
+      stage.setPointerCapture(event.pointerId);
+      renderCanvas(); renderInspector();
+      return;
+    }
+    if (edgeEl) {
+      const id = edgeEl.dataset.edgeId;
+      const edge = edgeById(id);
+      selected = { type: 'edge', id };
+      if (event.shiftKey && edge) {
+        const dims = new Map([...nodesLayer.querySelectorAll('.object-node')].map(el => [el.dataset.id, { w: el.offsetWidth, h: el.offsetHeight }]));
+        const pts = buildEdgePoints(edge, dims);
+        const projected = projectOntoPolyline(point, pts);
+        insertBend(edge, projected.point, projected.segment);
+        return;
+      }
+      renderCanvas(); renderInspector();
+      return;
+    }
+    selected = null; pendingSource = null;
+    renderCanvas(); renderInspector();
+  });
+
+  stage.addEventListener('pointermove', event => {
+    if (!drag) return;
+    const point = stagePoint(event);
+    const dx = point.x - drag.start.x, dy = point.y - drag.start.y;
+    if (Math.hypot(dx, dy) > 1.5) drag.moved = true;
+    if (!drag.moved) return;
+    if (drag.kind === 'object') {
+      const obj = objectById(drag.id); if (!obj) return;
+      obj.x = Math.max(22, Math.min(stage.clientWidth - 22, drag.origin.x + dx));
+      obj.y = Math.max(22, Math.min(stage.clientHeight - 22, drag.origin.y + dy));
+    } else {
+      const edge = edgeById(drag.id); if (!edge || !edge.bends[drag.index]) return;
+      edge.bends[drag.index].x = Math.max(4, Math.min(stage.clientWidth - 4, drag.origin.x + dx));
+      edge.bends[drag.index].y = Math.max(4, Math.min(stage.clientHeight - 4, drag.origin.y + dy));
+    }
+    renderCanvas();
+  });
+  function finishDrag() {
+    if (!drag) return;
+    const finished = drag; drag = null;
+    if (finished.moved) {
+      pushHistory(finished.before); persist(); render(); setStatus(finished.kind === 'object' ? 'Object moved' : 'Morphism reshaped');
+    }
+  }
+  stage.addEventListener('pointerup', finishDrag);
+  stage.addEventListener('pointercancel', finishDrag);
+
+  inspectorContent.addEventListener('focusin', () => { if (!inspectorEditBefore) inspectorEditBefore = clone(state); });
+  inspectorContent.addEventListener('input', event => {
+    const prop = event.target.dataset.prop;
+    if (!prop || !selected) return;
+    const item = selected.type === 'object' ? selectedObject() : selectedEdge();
+    if (!item) return;
+    item[prop] = prop === 'width' ? Number(event.target.value) : event.target.value;
+    renderCanvas(); persist();
+  });
+  inspectorContent.addEventListener('change', event => {
+    if (event.target.dataset.prop) {
+      if (inspectorEditBefore) pushHistory(inspectorEditBefore);
+      inspectorEditBefore = null; persist(); setStatus('Properties updated');
+    }
+  });
+  inspectorContent.addEventListener('focusout', event => {
+    if (event.target.dataset.prop && inspectorEditBefore) {
+      pushHistory(inspectorEditBefore); inspectorEditBefore = null; persist();
+    }
+  });
+  inspectorContent.addEventListener('click', event => {
+    const button = event.target.closest('[data-action]'); if (!button) return;
+    const action = button.dataset.action;
+    if (action === 'delete') deleteSelected();
+    if (action === 'add-bend') addBendToSelected();
+    if (action === 'clear-bends') {
+      const edge = selectedEdge(); if (!edge) return;
+      const before = clone(state); edge.bends = []; commit(before, 'Bend points removed');
+    }
+  });
+
+  document.querySelectorAll('[data-tool]').forEach(button => button.addEventListener('click', () => setTool(button.dataset.tool)));
+  document.getElementById('addBendTool').addEventListener('click', addBendToSelected);
+  document.getElementById('undoBtn').addEventListener('click', undo);
+  document.getElementById('redoBtn').addEventListener('click', redo);
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    if (!state.objects.length && !state.edges.length) return;
+    if (!confirm('Clear the entire diagram? This can be undone.')) return;
+    const before = clone(state); state = { version: 1, objects: [], edges: [] }; selected = null; pendingSource = null;
+    commit(before, 'Canvas cleared');
+  });
+  document.getElementById('saveBtn').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    downloadBlob(blob, 'category-diagram.json'); setStatus('Diagram data downloaded');
+  });
+  document.getElementById('openBtn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0]; if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      const clean = validateDiagram(parsed);
+      const before = clone(state); state = clean; selected = null; pendingSource = null;
+      recountLabels(); commit(before, 'Diagram opened');
+    } catch (error) { alert(`Could not open that diagram: ${error.message}`); }
+    fileInput.value = '';
+  });
+  document.getElementById('exampleBtn').addEventListener('click', () => {
+    const before = clone(state);
+    const w = stage.clientWidth, h = stage.clientHeight;
+    const leftX = Math.max(68, Math.min(w * .22, w / 2 - 82));
+    const rightX = Math.min(w - 68, Math.max(w * .78, w / 2 + 82));
+    const topY = Math.max(105, Math.min(155, h * .27));
+    const bottomY = Math.min(h - 78, Math.max(topY + 145, h * .68));
+    const midX = (leftX + rightX) / 2;
+    state = {
+      version: 1,
+      objects: [
+        { id: 'ex-a', x: leftX, y: topY, label: '\mathcal{C}', color: '#42516d', fill: '#f5f7ff' },
+        { id: 'ex-b', x: rightX, y: topY, label: '\mathcal{D}', color: '#42516d', fill: '#f5f7ff' },
+        { id: 'ex-c', x: midX, y: bottomY, label: '\mathcal{E}', color: '#42516d', fill: '#f5f7ff' }
+      ],
+      edges: [
+        { id: 'ex-f', source: 'ex-a', target: 'ex-b', label: 'F', color: '#6658d3', width: 2, style: 'solid', bends: [{ x: midX, y: Math.max(38, topY - 62) }] },
+        { id: 'ex-g', source: 'ex-a', target: 'ex-c', label: 'G', color: '#249b82', width: 2, style: 'solid', bends: [] },
+        { id: 'ex-h', source: 'ex-b', target: 'ex-c', label: 'H', color: '#d27b42', width: 2, style: 'solid', bends: [] }
+      ]
+    };
+    selected = null; pendingSource = null; recountLabels(); commit(before, 'Example diagram loaded');
+  });
+  document.getElementById('exportBtn').addEventListener('click', exportSvg);
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = $('a', { href: url, download: filename }); document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function validateDiagram(input) {
+    if (!input || !Array.isArray(input.objects) || !Array.isArray(input.edges)) throw new Error('Expected an objects array and an edges array.');
+    const objects = input.objects.map((o, i) => {
+      if (!o || typeof o !== 'object' || !Number.isFinite(Number(o.x)) || !Number.isFinite(Number(o.y))) throw new Error(`Object ${i + 1} has invalid coordinates.`);
+      return { id: String(o.id || makeId('obj')), x: Number(o.x), y: Number(o.y), label: String(o.label ?? 'X'), color: validColor(o.color, '#41506a'), fill: validColor(o.fill, '#ffffff') };
+    });
+    const ids = new Set(objects.map(o => o.id));
+    const edges = input.edges.map((e, i) => {
+      if (!e || !ids.has(String(e.source)) || !ids.has(String(e.target))) throw new Error(`Morphism ${i + 1} refers to a missing object.`);
+      const bends = Array.isArray(e.bends) ? e.bends.map(p => ({ x: Number(p.x), y: Number(p.y) })).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y)) : [];
+      return { id: String(e.id || makeId('arr')), source: String(e.source), target: String(e.target), label: String(e.label ?? ''), color: validColor(e.color, '#6658d3'), width: [1.5,2,3,4].includes(Number(e.width)) ? Number(e.width) : 2, style: ['solid','dashed','dotted'].includes(e.style) ? e.style : 'solid', bends };
+    });
+    return { version: 1, objects, edges };
+  }
+  function validColor(value, fallback) { return /^#[0-9a-f]{6}$/i.test(String(value || '')) ? value : fallback; }
+  function recountLabels() { objectCounter = state.objects.length; edgeCounter = state.edges.length; }
+
+  function exportSvg() {
+    const rect = stage.getBoundingClientRect();
+    const dims = new Map([...nodesLayer.querySelectorAll('.object-node')].map(el => [el.dataset.id, { w: el.offsetWidth, h: el.offsetHeight }]));
+    const width = Math.max(1, Math.round(rect.width)), height = Math.max(1, Math.round(rect.height));
+    const parts = [`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xhtml="http://www.w3.org/1999/xhtml" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+      '<defs><pattern id="grid" width="19" height="19" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".8" fill="#dfe3ee"/></pattern></defs>',
+      `<rect width="100%" height="100%" fill="#fff"/><rect width="100%" height="100%" fill="url(#grid)"/>`];
+    for (const edge of state.edges) {
+      const pts = buildEdgePoints(edge, dims); if (pts.length < 2) continue;
+      const d = pts.map((p,i) => `${i ? 'L' : 'M'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ');
+      const marker = `m-${edge.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+      parts.push(`<defs><marker id="${marker}" markerWidth="9" markerHeight="9" refX="7.3" refY="4.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 4.5 L 0 9 z" fill="${edge.color}"/></marker></defs>`);
+      const dash = edge.style === 'dashed' ? ' stroke-dasharray="7 5"' : edge.style === 'dotted' ? ' stroke-dasharray="2 5"' : '';
+      parts.push(`<path d="${d}" fill="none" stroke="${edge.color}" stroke-width="${edge.width}" stroke-linecap="round" stroke-linejoin="miter" marker-end="url(#${marker})"${dash}/>`);
+      if (edge.label) {
+        const p = pointAlong(pts, .5);
+        const labelText = escapeXml(edge.label);
+        parts.push(`<g transform="translate(${p.x.toFixed(2)} ${(p.y-11).toFixed(2)})"><rect x="-28" y="-12" width="56" height="23" rx="6" fill="#fff" stroke="#e0e4ed"/><text text-anchor="middle" dominant-baseline="central" font-family="Georgia,serif" font-size="13" fill="#2c3447">${labelText}</text></g>`);
+      }
+    }
+    for (const obj of state.objects) {
+      const dim = dims.get(obj.id) || { w: 76, h: 46 };
+      const x = obj.x - dim.w/2, y = obj.y - dim.h/2;
+      parts.push(`<rect x="${x}" y="${y}" width="${dim.w}" height="${dim.h}" rx="10" fill="${obj.fill}" stroke="${obj.color}" stroke-width="1.7"/>`);
+      // The SVG keeps the original TeX source as text so the exported file is portable and editable.
+      parts.push(`<text x="${obj.x}" y="${obj.y+4}" text-anchor="middle" font-family="Georgia,serif" font-size="14" fill="#20283a">${escapeXml(obj.label)}</text>`);
+    }
+    parts.push('</svg>');
+    downloadBlob(new Blob([parts.join('\n')], { type: 'image/svg+xml;charset=utf-8' }), 'category-diagram.svg');
+    setStatus('SVG exported (labels use their LaTeX source text)');
+  }
+
+  document.addEventListener('keydown', event => {
+    const inField = ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') { event.preventDefault(); redo(); return; }
+    if (inField) return;
+    if (event.key === 'Escape') { pendingSource = null; setTool('select'); return; }
+    if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); deleteSelected(); return; }
+    if (event.key.toLowerCase() === 'v') setTool('select');
+    if (event.key.toLowerCase() === 'o') setTool('object');
+    if (event.key.toLowerCase() === 'a') setTool('arrow');
+  });
+
+  function loadLocal() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) { state = validateDiagram(JSON.parse(saved)); recountLabels(); }
+    } catch { state = { version: 1, objects: [], edges: [] }; }
+  }
+  const observer = new ResizeObserver(() => renderCanvas());
+  observer.observe(stage);
+  loadLocal(); render(); updateHistoryButtons();
+  // KaTeX is loaded with defer; this second pass typesets the initial state once it is available.
+  window.addEventListener('load', () => renderCanvas(), { once: true });
+})();
+</script>
+</body>
+</html>
